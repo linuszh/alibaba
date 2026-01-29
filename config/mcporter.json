@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "notebooklm": {
+      "command": "npx -y notebooklm-mcp"
+    }
+  },
+  "imports": []
+}
