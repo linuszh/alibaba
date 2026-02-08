@@ -113,6 +113,37 @@ Skills provide your tools. When you need one, check its `SKILL.md`. Keep local n
 - **Discord links:** Wrap multiple links in `<>` to suppress embeds: `<https://example.com>`
 - **WhatsApp:** No headers — use **bold** or CAPS for emphasis
 
+## 🔐 Sandbox GitHub Access
+
+**Problem:** Sandboxes have read-only workspace access and can't push to GitHub.
+
+**Solution:** Before spawning sandboxes that need to push to GitHub, create ephemeral SSH keys:
+
+```bash
+# 1. Generate temporary key pair
+TIMESTAMP=$(date +%s)
+ssh-keygen -t ed25519 -f "/tmp/sandbox-key-${TIMESTAMP}" -N "" -C "sandbox-temp-${TIMESTAMP}"
+
+# 2. Add to GitHub
+gh ssh-key add "/tmp/sandbox-key-${TIMESTAMP}.pub" --title "sandbox-temp-${TIMESTAMP}"
+
+# 3. Note the timestamp for cleanup!
+echo "Sandbox key timestamp: ${TIMESTAMP}"
+
+# 4. Spawn sandbox (keys need to be mounted - TODO: integration)
+# sessions_spawn with keys mounted...
+
+# 5. After sandbox completes - CLEANUP!
+./scripts/cleanup-sandbox-key.sh ${TIMESTAMP}
+```
+
+**Important:**
+- Always clean up keys after sandbox completes
+- Keys are temporary and session-scoped
+- See `docs/sandbox-github-workflow.md` for full details
+
+**Current limitation:** Full automation pending - need to manually track timestamp and cleanup. Integration with `sessions_spawn` coming soon.
+
 ## 💓 Heartbeats - Be Proactive!
 
 When you receive a heartbeat poll (message matches the configured heartbeat prompt), don't just reply `HEARTBEAT_OK` every time. Use heartbeats productively!
