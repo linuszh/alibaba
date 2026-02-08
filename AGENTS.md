@@ -117,32 +117,34 @@ Skills provide your tools. When you need one, check its `SKILL.md`. Keep local n
 
 **Problem:** Sandboxes have read-only workspace access and can't push to GitHub.
 
-**Solution:** Before spawning sandboxes that need to push to GitHub, create ephemeral SSH keys:
+**Solution:** Use the integrated spawn script that handles the entire lifecycle:
 
 ```bash
-# 1. Generate temporary key pair
-TIMESTAMP=$(date +%s)
-ssh-keygen -t ed25519 -f "/tmp/sandbox-key-${TIMESTAMP}" -N "" -C "sandbox-temp-${TIMESTAMP}"
+# 1. Prepare keys and get cleanup script
+./scripts/sandbox-github-spawn.sh \
+  --label "task-name" \
+  --task "Task description"
 
-# 2. Add to GitHub
-gh ssh-key add "/tmp/sandbox-key-${TIMESTAMP}.pub" --title "sandbox-temp-${TIMESTAMP}"
+# 2. Spawn sandbox via sessions_spawn tool
+# The script outputs what you need to pass
 
-# 3. Note the timestamp for cleanup!
-echo "Sandbox key timestamp: ${TIMESTAMP}"
-
-# 4. Spawn sandbox (keys need to be mounted - TODO: integration)
-# sessions_spawn with keys mounted...
-
-# 5. After sandbox completes - CLEANUP!
-./scripts/cleanup-sandbox-key.sh ${TIMESTAMP}
+# 3. After sandbox completes - run cleanup
+CLEANUP_SCRIPT=$(cat /tmp/sandbox-cleanup-latest.txt)
+bash "${CLEANUP_SCRIPT}"
 ```
 
-**Important:**
-- Always clean up keys after sandbox completes
-- Keys are temporary and session-scoped
-- See `docs/sandbox-github-workflow.md` for full details
+**What it does:**
+- ✅ Generates ephemeral Ed25519 SSH key pair
+- ✅ Adds public key to GitHub via `gh ssh-key add`
+- ✅ Creates auto-cleanup script for after spawn
+- ⚠️ Keys need manual mounting in sandbox (automation pending)
 
-**Current limitation:** Full automation pending - need to manually track timestamp and cleanup. Integration with `sessions_spawn` coming soon.
+**Important:**
+- Always run cleanup script after sandbox completes
+- Keys are temporary and session-scoped
+- See `skills/sandbox-github/SKILL.md` for full documentation
+
+**Current limitation:** Key mounting not yet automated in `sessions_spawn`. Full integration pending.
 
 ## 💓 Heartbeats - Be Proactive!
 
