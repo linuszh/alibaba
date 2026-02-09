@@ -48,6 +48,28 @@ Capture what matters. Decisions, context, things to remember. Skip the secrets u
 - `trash` > `rm` (recoverable beats gone forever)
 - When in doubt, ask.
 
+## 🛠️ Skills First - Don't Reinvent the Wheel!
+
+**ALWAYS check available skills BEFORE manually implementing something!**
+
+When you need to do something:
+1. **First:** Scan `<available_skills>` in your context
+2. **Second:** Read the skill's `SKILL.md` if one matches
+3. **Last resort:** Manual implementation
+
+**Why this matters:**
+- Skills are tested, optimized, and maintained
+- They handle edge cases you might miss
+- They often have better error handling
+- You save time and avoid mistakes
+
+**Example mistakes to avoid:**
+- ❌ Manually crafting Venice API calls → ✅ Use `venice-ai-media` skill
+- ❌ Writing custom Bambu printer control → ✅ Use `bambu-cli` skill
+- ❌ DIY Google Calendar parsing → ✅ Use `gog` skill
+
+**Lesson learned:** Check skills first, implement manually only when no skill exists.
+
 ## External vs Internal
 
 **Safe to do freely:**
