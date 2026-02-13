@@ -132,7 +132,50 @@ Venice offers two distinct privacy levels — ideal for gatekeeper fallback:
 | Mode | How it works | Models |
 |------|--------------|--------|
 | **Private** | Prompts/responses never stored or logged. Fully ephemeral. Venice cannot see your data. | Llama 3.3 70B, DeepSeek V3.2, Qwen3, Venice Uncensored, etc. (15 models) |
-| **Anonymized** | Proxied through Venice with metadata stripped. Underlying provider sees anonymized requests but not your identity. | Various |
+| **Anonymized** | Proxied through Venice with metadata stripped. Underlying provider sees anonymized requests but not your identity. | Claude Opus 4.5, GPT-5.2, Gemini, Grok, Kimi (10 models) |
+
+**Important:** For the gatekeeper's fallback chain, we **exclusively use Private models** (Llama 3.3 70B and DeepSeek V3.2). This means even when Ollama is down, the triage/classification step still never leaks data to any provider that logs it.
+
+---
+
+## Why the Coder Gets All Tools
+
+OpenClaw has 20+ built-in tools organized in layers:
+
+| Layer | Tools |
+|-------|-------|
+| **1 — File & Execution** | read, write, edit, apply_patch, grep, find, ls, exec, process |
+| **2 — Web & Browser** | web_search, web_fetch, browser |
+| **3 — Agent & Comms** | message, sessions_spawn, sessions_send, sessions_list, session_status, agents_list |
+| **4 — Automation** | cron, image, nodes, canvas, gateway |
+
+The coder agent needs most of these because real coding work involves:
+- `grep/find/ls` for navigating codebases
+- `web_search/web_fetch` for looking up API docs, package versions, Stack Overflow
+- `browser` for testing web apps, reading rendered docs
+- `apply_patch` for multi-file changes
+- `process` for managing background builds (npm install, docker build)
+- `sessions_spawn` to hand off to devops for deployment
+- `exec` for running git, npm, pip, docker, tests
+
+**Restricting with `tools.allow` would break half these workflows.**
+
+**The Docker sandbox IS the security boundary** — the coder can do whatever it wants inside its container but can't touch the host.
+
+---
+
+## Security Considerations
+
+| Component | Security Notes |
+|-----------|----------------|
+| **Gatekeeper** | Runs on host — needs to spawn sub-agents |
+| **DevOps** | Runs on host — needs SSH/API access to infrastructure |
+| **All other agents** | Sandboxed in Docker containers |
+| **Private agent** | No browser/internet — data stays local |
+| **Elevated mode** | Restricted to your Telegram/WhatsApp IDs only |
+| **Proxmox API token** | Create read-only (never use root credentials) |
+| **Dokploy API token** | Should be scoped appropriately |
+| **OPNsense API user** | Should have minimal required permissions |
 
 ---
 

@@ -65,6 +65,20 @@ Gatekeeper fallbacks (when Ollama slow):
 
 ## Tool Restrictions by Agent
 
+### coder
+**No tools.allow/deny — let it use everything within sandbox!**
+
+The Docker sandbox IS the security boundary. The coder needs:
+- `grep/find/ls` — navigating codebases
+- `web_search/web_fetch` — API docs, package versions
+- `browser` — testing web apps, reading docs
+- `apply_patch` — multi-file changes
+- `process` — background builds (npm install, docker build)
+- `sessions_spawn` — hand off to devops for deployment
+- `exec` — git, npm, pip, docker, tests
+
+**Restricting with tools.allow would break half these workflows.**
+
 ### comms
 ```json
 "tools": {
