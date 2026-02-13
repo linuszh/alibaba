@@ -1,0 +1,317 @@
+#!/usr/bin/env python3
+"""
+Alibaba Product Search & Tracking CLI
+Integrates aba-cli-scrapper with Google Sheets and monitoring capabilities
+"""
+
+import os
+import sys
+import json
+import time
+import subprocess
+import sqlite3
+from pathlib import Path
+from datetime import datetime
+import click
+from colorama import init, Fore, Style
+
+# Initialize colorama
+init(autoreset=True)
+
+# Get skill directory
+SKILL_DIR = Path(__file__).parent
+CONFIG_FILE = SKILL_DIR / "config.json"
+DATA_DIR = SKILL_DIR / "data"
+LIB_DIR = SKILL_DIR / "lib"
+
+# Add lib directory to path
+sys.path.insert(0, str(LIB_DIR))
+
+# Load configuration
+def load_config():
+    """Load configuration from config.json"""
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_config(config):
+    """Save configuration to config.json"""
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, indent=2, fp=f)
+
+config = load_config()
+
+# Ensure data directory exists
+DATA_DIR.mkdir(exist_ok=True)
+
+
+@click.group()
+@click.version_option(version='1.0.0')
+def cli():
+    """Alibaba Product Search & Tracking Tool
+    
+    Search Alibaba.com, track products, and sync to Google Sheets.
+    """
+    pass
+
+
+@cli.command()
+@click.argument('keywords')
+@click.option('--pages', '-p', default=None, type=int, help='Number of pages to scrape')
+@click.option('--sheets/--no-sheets', default=True, help='Export to Google Sheets')
+@click.option('--sheet-name', '-s', default=None, help='Google Sheets name')
+@click.option('--folder', '-f', default=None, help='Custom HTML results folder')
+def search(keywords, pages, sheets, sheet_name, folder):
+    """Search Alibaba for products
+    
+    KEYWORDS: Search terms (e.g., "led lights", "usb cables")
+    """
+    click.echo(f"{Fore.CYAN}🔍 Searching Alibaba for: {Fore.YELLOW}{keywords}{Style.RESET_ALL}")
+    
+    # Get config values
+    pages = pages or config.get('default_pages', 10)
+    api_key = config.get('api_key', '')
+    provider = config.get('proxy_provider', 'syphoon')
+    
+    # Check if API key is set
+    if not api_key:
+        click.echo(f"{Fore.RED}❌ Error: API key not set!{Style.RESET_ALL}")
+        click.echo(f"{Fore.YELLOW}Run: alibaba-search configure --api-key YOUR_KEY{Style.RESET_ALL}")
+        sys.exit(1)
+    
+    # Sanitize keywords for folder name
+    folder_name = folder or keywords.replace(' ', '_').replace('/', '_')
+    html_folder = DATA_DIR / f"html_{folder_name}"
+    db_file = DATA_DIR / f"{folder_name}.db"
+    
+    # Step 1: Scrape Alibaba
+    click.echo(f"{Fore.GREEN}Step 1: Scraping {pages} pages...{Style.RESET_ALL}")
+    
+    scraper_cmd = f"aba-run {'syphoon-scraper' if provider == 'syphoon' else 'scraper'}"
+    scraper_cmd += f' "{keywords}" -hf "{html_folder}" -pr {pages}'
+    
+    result = subprocess.run(scraper_cmd, shell=True, capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        click.echo(f"{Fore.RED}❌ Scraping failed:{Style.RESET_ALL}")
+        click.echo(result.stderr)
+        sys.exit(1)
+    
+    click.echo(f"{Fore.GREEN}✓ Scraped {pages} pages{Style.RESET_ALL}")
+    
+    # Step 2: Initialize database
+    click.echo(f"{Fore.GREEN}Step 2: Creating database...{Style.RESET_ALL}")
+    
+    db_init_cmd = f'aba-run db-init sqlite -f "{db_file.stem}"'
+    subprocess.run(db_init_cmd, shell=True, cwd=DATA_DIR)
+    
+    # Step 3: Update database with scraped data
+    click.echo(f"{Fore.GREEN}Step 3: Importing data to database...{Style.RESET_ALL}")
+    
+    db_update_cmd = f'aba-run db-update sqlite --kw-results "{html_folder}" --filename "{db_file.stem}"'
+    subprocess.run(db_update_cmd, shell=True, cwd=DATA_DIR)
+    
+    # Step 4: Export to CSV
+    csv_file = DATA_DIR / f"{folder_name}.csv"
+    click.echo(f"{Fore.GREEN}Step 4: Exporting to CSV...{Style.RESET_ALL}")
+    
+    export_cmd = f'aba-run export-as-csv --sqlite_file "{db_file}" --to "{csv_file}"'
+    subprocess.run(export_cmd, shell=True, cwd=DATA_DIR)
+    
+    click.echo(f"{Fore.GREEN}✓ Data exported to: {csv_file}{Style.RESET_ALL}")
+    
+    # Step 5: Upload to Google Sheets (if enabled)
+    if sheets and config.get('google_sheets', {}).get('enabled', True):
+        click.echo(f"{Fore.GREEN}Step 5: Uploading to Google Sheets...{Style.RESET_ALL}")
+        
+        sheet_name = sheet_name or config.get('google_sheets', {}).get('sheet_name', f'Alibaba - {keywords}')
+        
+        try:
+            from sheets_sync import upload_to_sheets
+            spreadsheet_url = upload_to_sheets(csv_file, sheet_name, config)
+            click.echo(f"{Fore.GREEN}✓ Uploaded to Google Sheets:{Style.RESET_ALL}")
+            click.echo(f"{Fore.BLUE}{spreadsheet_url}{Style.RESET_ALL}")
+        except ImportError:
+            click.echo(f"{Fore.YELLOW}⚠ Google Sheets integration not available{Style.RESET_ALL}")
+            click.echo(f"{Fore.YELLOW}  Install: pip install google-auth google-auth-oauthlib google-api-python-client{Style.RESET_ALL}")
+        except Exception as e:
+            click.echo(f"{Fore.RED}❌ Google Sheets upload failed: {e}{Style.RESET_ALL}")
+    
+    # Summary
+    click.echo(f"\n{Fore.CYAN}{'='*60}{Style.RESET_ALL}")
+    click.echo(f"{Fore.GREEN}✓ Search completed successfully!{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}{'='*60}{Style.RESET_ALL}")
+    click.echo(f"Keywords: {keywords}")
+    click.echo(f"Pages: {pages}")
+    click.echo(f"Database: {db_file}")
+    click.echo(f"CSV: {csv_file}")
+
+
+@cli.command()
+@click.argument('keywords')
+@click.option('--interval', '-i', default=300, type=int, help='Check interval in seconds (default: 300 = 5 min)')
+@click.option('--sheets/--no-sheets', default=True, help='Sync to Google Sheets')
+@click.option('--notify', default=None, help='Notification channel (discord/telegram)')
+def monitor(keywords, interval, sheets, notify):
+    """Monitor products with continuous tracking
+    
+    KEYWORDS: Products to monitor (e.g., "led lights")
+    """
+    click.echo(f"{Fore.CYAN}👁 Starting monitoring for: {Fore.YELLOW}{keywords}{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}Interval: {interval} seconds ({interval/60:.1f} minutes){Style.RESET_ALL}")
+    
+    iteration = 0
+    
+    try:
+        while True:
+            iteration += 1
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            click.echo(f"\n{Fore.CYAN}[{timestamp}] Iteration #{iteration}{Style.RESET_ALL}")
+            
+            # Run search
+            ctx = click.get_current_context()
+            ctx.invoke(search, keywords=keywords, pages=5, sheets=sheets, sheet_name=f"Monitor - {keywords}")
+            
+            # Wait for next iteration
+            click.echo(f"{Fore.YELLOW}⏳ Next check in {interval} seconds...{Style.RESET_ALL}")
+            time.sleep(interval)
+            
+    except KeyboardInterrupt:
+        click.echo(f"\n{Fore.YELLOW}⏹ Monitoring stopped by user{Style.RESET_ALL}")
+        sys.exit(0)
+
+
+@cli.command()
+@click.option('--database', '-d', required=True, help='SQLite database file')
+@click.option('--sheet-name', '-s', default=None, help='Google Sheets name')
+def export(database, sheet_name):
+    """Export existing database to Google Sheets
+    
+    DATABASE: Path to SQLite database file
+    """
+    db_path = Path(database)
+    
+    if not db_path.exists():
+        click.echo(f"{Fore.RED}❌ Database not found: {database}{Style.RESET_ALL}")
+        sys.exit(1)
+    
+    # Export to CSV first
+    csv_file = db_path.with_suffix('.csv')
+    click.echo(f"{Fore.GREEN}Exporting to CSV...{Style.RESET_ALL}")
+    
+    export_cmd = f'aba-run export-as-csv --sqlite_file "{db_path}" --to "{csv_file}"'
+    subprocess.run(export_cmd, shell=True)
+    
+    # Upload to Google Sheets
+    sheet_name = sheet_name or config.get('google_sheets', {}).get('sheet_name', 'Alibaba Products')
+    
+    try:
+        from sheets_sync import upload_to_sheets
+        spreadsheet_url = upload_to_sheets(csv_file, sheet_name, config)
+        click.echo(f"{Fore.GREEN}✓ Uploaded to Google Sheets:{Style.RESET_ALL}")
+        click.echo(f"{Fore.BLUE}{spreadsheet_url}{Style.RESET_ALL}")
+    except Exception as e:
+        click.echo(f"{Fore.RED}❌ Export failed: {e}{Style.RESET_ALL}")
+        sys.exit(1)
+
+
+@cli.command()
+def list():
+    """List all tracked products and databases"""
+    click.echo(f"{Fore.CYAN}📋 Tracked Products:{Style.RESET_ALL}\n")
+    
+    if not DATA_DIR.exists():
+        click.echo(f"{Fore.YELLOW}No data directory found{Style.RESET_ALL}")
+        return
+    
+    # List all database files
+    db_files = list(DATA_DIR.glob("*.db"))
+    
+    if not db_files:
+        click.echo(f"{Fore.YELLOW}No products tracked yet{Style.RESET_ALL}")
+        return
+    
+    for db_file in db_files:
+        # Get product count from database
+        try:
+            conn = sqlite3.connect(db_file)
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM products")
+            product_count = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(DISTINCT supplier_id) FROM products")
+            supplier_count = cursor.fetchone()[0]
+            conn.close()
+            
+            click.echo(f"{Fore.GREEN}• {db_file.stem}{Style.RESET_ALL}")
+            click.echo(f"  Products: {product_count}")
+            click.echo(f"  Suppliers: {supplier_count}")
+            click.echo(f"  File: {db_file}")
+            click.echo()
+        except Exception as e:
+            click.echo(f"{Fore.RED}• {db_file.stem} (error reading){Style.RESET_ALL}\n")
+
+
+@cli.command()
+@click.option('--product-url', '-u', required=True, help='Alibaba product URL')
+def seller(product_url):
+    """Extract seller contact information from product page
+    
+    Note: Direct messaging requires Alibaba account authentication
+    """
+    click.echo(f"{Fore.CYAN}📞 Fetching seller information...{Style.RESET_ALL}\n")
+    
+    try:
+        from seller_info import extract_seller_info
+        info = extract_seller_info(product_url)
+        
+        click.echo(f"{Fore.GREEN}Seller: {info.get('name', 'Unknown')}{Style.RESET_ALL}")
+        click.echo(f"Verification: {info.get('verification', 'Unknown')}")
+        click.echo(f"Years: {info.get('years', 'Unknown')}")
+        click.echo(f"Country: {info.get('country', 'Unknown')}")
+        click.echo(f"Profile: {info.get('profile_url', 'N/A')}")
+        
+        if 'contact' in info:
+            click.echo(f"\n{Fore.YELLOW}Contact Information:{Style.RESET_ALL}")
+            for key, value in info['contact'].items():
+                click.echo(f"  {key}: {value}")
+        
+        click.echo(f"\n{Fore.YELLOW}⚠ Note: Direct chat requires manual login to Alibaba.com{Style.RESET_ALL}")
+        
+    except Exception as e:
+        click.echo(f"{Fore.RED}❌ Failed to fetch seller info: {e}{Style.RESET_ALL}")
+
+
+@cli.command()
+@click.option('--api-key', help='Proxy provider API key')
+@click.option('--provider', type=click.Choice(['syphoon', 'brightdata']), help='Proxy provider')
+@click.option('--spreadsheet-id', help='Google Sheets spreadsheet ID')
+@click.option('--show/--no-show', default=False, help='Show current configuration')
+def configure(api_key, provider, spreadsheet_id, show):
+    """Configure Alibaba search settings"""
+    
+    if show:
+        click.echo(f"{Fore.CYAN}Current Configuration:{Style.RESET_ALL}\n")
+        click.echo(json.dumps(config, indent=2))
+        return
+    
+    if api_key:
+        config['api_key'] = api_key
+        click.echo(f"{Fore.GREEN}✓ API key updated{Style.RESET_ALL}")
+    
+    if provider:
+        config['proxy_provider'] = provider
+        click.echo(f"{Fore.GREEN}✓ Provider set to: {provider}{Style.RESET_ALL}")
+    
+    if spreadsheet_id:
+        if 'google_sheets' not in config:
+            config['google_sheets'] = {}
+        config['google_sheets']['spreadsheet_id'] = spreadsheet_id
+        click.echo(f"{Fore.GREEN}✓ Google Sheets ID updated{Style.RESET_ALL}")
+    
+    save_config(config)
+    click.echo(f"\n{Fore.CYAN}Configuration saved to: {CONFIG_FILE}{Style.RESET_ALL}")
+
+
+if __name__ == '__main__':
+    cli()
