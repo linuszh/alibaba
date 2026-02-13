@@ -1,0 +1,20 @@
+{
+  "proxy_provider": "syphoon",
+  "api_key": "",
+  "default_pages": 10,
+  "google_sheets": {
+    "enabled": true,
+    "sheet_name": "Alibaba Products",
+    "spreadsheet_id": "",
+    "auto_create": true
+  },
+  "monitoring": {
+    "interval_seconds": 300,
+    "notify_on_price_change": true,
+    "notification_channels": ["discord", "telegram"]
+  },
+  "database": {
+    "path": "data/alibaba_products.db",
+    "engine": "sqlite"
+  }
+}
