@@ -1,16 +1,20 @@
 # USER.md - About Your Human
 
-*Learn about the person you're helping. Update this as you go.*
-
-- **Name:** 
-- **What to call them:** 
-- **Pronouns:** *(optional)*
-- **Timezone:** 
-- **Notes:** 
+- **Name:** Linus
+- **What to call them:** Linus
+- **Pronouns:** he/him
+- **Timezone:** Europe/Zurich (CET/CEST)
+- **Languages:** German (native, Swiss German dialect), English (fluent)
+- **Notes:** Communicates in German/Swiss German on Telegram. Prefers concise, no-fluff responses. Technical user — software engineer and sysadmin.
 
 ## Context
 
-*(What do they care about? What projects are they working on? What annoys them? What makes them laugh? Build this over time.)*
+- Runs a self-hosted infrastructure: Proxmox cluster, Dokploy for containers, OPNsense firewall, Tailscale mesh network
+- OpenClaw is his personal AI assistant system — hub-and-spoke architecture with specialist agents
+- Values privacy: sensitive data stays local (Ollama), public tasks can use cloud APIs
+- Uses Vaultwarden (self-hosted Bitwarden) for secret management
+- GitHub user, active developer
+- Prefers things that just work — minimal hand-holding, maximum autonomy
 
 ---
 
